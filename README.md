@@ -1,8 +1,8 @@
 # dsh-compact
 
-`dsh-compact` 是面向 [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) 的上下文压缩插件，用于在对话接近模型上下文上限时自动生成检查点摘要，并在发生上下文溢出时进行有界恢复。
+`dsh-compact` 是面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的上下文压缩插件，用于在对话接近模型上下文上限时自动生成检查点摘要，并在发生上下文溢出时进行有界恢复。
 
-该插件最初随 [Deepseek Harness EAC](https://github.com/zouyuxuan122/Deepseek-Harness-EAC) 开发，独立仓库用于单独维护和分发插件本体。
+该插件最初随 [Deepseek Harness EAC](https://github.com/DSH-EAC/DSH-Desktop-EAC) 开发，独立仓库用于单独维护和分发插件本体。
 
 ## 功能
 
@@ -20,7 +20,9 @@
 
 ### Deepseek Harness EAC
 
-当包含该插件的 EAC 版本正式发布后，插件会作为内置组件安装，不需要重复添加。
+包含 `dsh-compact` 的 EAC 发行版已提供内置安装。若已通过 EAC 安装该插件，不需要重复添加；具体内置版本及宿主兼容性以对应 EAC 发行版为准。
+
+独立仓库只分发插件本体。桌面宿主集成与 preset 迁移由 EAC 主项目维护，独立版本与 EAC 内置版本可能不同。
 
 ### 从 GitHub 安装
 
@@ -87,6 +89,28 @@ dsh plugin --profile web add "github:zixin947/dsh-compact#main"
 - `retainRatio` 必须小于对应的 `thresholdRatio`。
 - 模型策略使用 `provider + model` 精确匹配。
 
+## 架构
+
+```mermaid
+flowchart TD
+    A[Agent 请求开始] --> B[模型策略与上下文压力检查]
+    B --> C{达到压缩阈值?}
+    C -->|是| D[扩展官方 BasicCompactionEngine]
+    D --> E[持久化检查点摘要并替换较早上下文]
+    E --> F[继续原请求]
+    C -->|否| F
+    F --> G{明确的上下文溢出错误?}
+    G -->|是| H[按配置有界压缩与重试]
+    G -->|否| I[保持正常请求结果]
+```
+
+- `lib/agent.js`：在同一个 Agent 局部作用域内组合压缩引擎、官方 `/compact` 命令与工具结果裁剪器。
+- `lib/engine.js`：扩展官方基础引擎，接入请求前检查、溢出恢复、空摘要降级、取消与状态清理。
+- `lib/policy.js`：共享配置、按模型覆盖、会话状态与策略解析。
+- `lib/index.js` 与 `lib/client.js`：插件入口、状态接口和设置界面。
+
+插件复用官方摘要与持久化能力；此仓库不实现检索式长期记忆或 RAG Pipeline。
+
 ## 工作机制
 
 ### 自动压缩
@@ -126,6 +150,13 @@ dsh plugin --profile web add "github:zixin947/dsh-compact#main"
 - 自动压缩失败时会记录状态并继续用户请求，不会因为摘要服务异常直接中断当前回合。
 - 该版本面向 `@deepseek-ai/dsh 0.1.0-rc.7` 及相同插件 API 的版本。
 - 独立仓库只包含插件本体；EAC 的 preset 迁移和桌面宿主集成仍由 EAC 主项目维护。
+
+## 版本与验证边界
+
+- 当前 `package.json` 版本为 `1.0.0`，安装命令使用 `main` 分支；仓库尚未提供独立 tag 或 Release。
+- 当前声明面向 `@deepseek-ai/dsh 0.1.0-rc.7` 及相同插件 API 的版本。新版宿主需要单独验证，不能仅依据安装成功推断兼容。
+- 本仓库尚未配置独立测试脚本或 CI；EAC 主项目维护其宿主集成与相关回归测试。
+- 使用说明中的流程与默认值来自当前源码。升级前应核对宿主版本、插件版本及现有挂载配置。
 
 ## 反馈问题
 
