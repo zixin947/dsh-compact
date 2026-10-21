@@ -1,2 +1,3 @@
-- id: compact
-  name: 'dsh-compact'
+- insert:
+    - id: compact
+      name: 'dsh-compact'
